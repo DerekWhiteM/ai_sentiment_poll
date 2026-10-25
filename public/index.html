@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Sentiment Poll</title>
+    <!-- Chart.js for the distribution graph -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 3rem;
+            background: radial-gradient(circle at center, #1a1a2e 0%, #050505 100%);
+            color: #ffffff;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            width: 100%;
+            max-width: 900px;
+        }
+        h1 {
+            text-align: center;
+            color: #deff9a;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            margin-bottom: 2rem;
+            font-weight: 600;
+        }
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 2rem;
+        }
+        .card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(222, 255, 154, 0.2);
+            border-radius: 16px;
+            padding: 2rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+        }
+        .stats-card {
+            text-align: center;
+            border-color: #deff9a;
+            box-shadow: 0 0 25px rgba(222, 255, 154, 0.15);
+        }
+        .stats-label {
+            font-size: 1.2rem;
+            color: #a0a0a0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .average-score {
+            font-size: 6rem;
+            font-weight: bold;
+            color: #deff9a;
+            margin: 0.5rem 0;
+            text-shadow: 0 0 20px rgba(222, 255, 154, 0.4);
+        }
+        .chart-container {
+            position: relative;
+            height: 400px;
+            width: 100%;
+        }
+        .total-votes {
+            text-align: center;
+            color: #888;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>AI Sentiment Poll</h1>
+        
+        <div class="dashboard-grid">
+            <div class="card stats-card">
+                <div class="stats-label">Average Sentiment (-3 to +3)</div>
+                <div class="average-score" id="averageDisplay">--</div>
+                <div class="total-votes" id="totalVotesDisplay">Waiting for responses...</div>
+            </div>
+
+            <div class="card">
+                <div class="chart-container">
+                    <canvas id="distributionChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let sentimentChart = null;
+
+        // Fetch data from Node server
+        async function fetchData() {
+            try {
+                const response = await fetch('/api/scores');
+                if (!response.ok) throw new Error('Network response was not ok');
+                const scores = await response.json();
+                updateDashboard(scores);
+            } catch (error) {
+                console.error('Error fetching data:', error);
+            }
+        }
+
+        function updateDashboard(scores) {
+            const totalVotes = scores.length;
+            const avgElement = document.getElementById('averageDisplay');
+            const votesElement = document.getElementById('totalVotesDisplay');
+            const distribution = Array(7).fill(0);
+
+            if (totalVotes === 0) {
+                avgElement.innerText = '--';
+                votesElement.innerText = 'No responses yet.';
+            } else {
+                // Calculate Average
+                const sum = scores.reduce((a, b) => a + b, 0);
+                const avg = (sum / totalVotes).toFixed(1);
+                avgElement.innerText = avg;
+                votesElement.innerText = `Total Responses: ${totalVotes}`;
+
+                // Calculate Distribution
+                scores.forEach(score => {
+                    distribution[score + 3]++;
+                });
+            }
+
+            renderChart(distribution);
+        }
+
+        function renderChart(distribution) {
+            const ctx = document.getElementById('distributionChart').getContext('2d');
+            
+            // If chart exists, just update the data for a smooth animation
+            if (sentimentChart) {
+                sentimentChart.data.datasets[0].data = distribution;
+                sentimentChart.update();
+                return;
+            }
+
+            // Create new chart on first load
+            sentimentChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['-3', '-2', '-1', '0', '1', '2', '3'],
+                    datasets: [{
+                        label: 'Votes',
+                        data: distribution,
+                        backgroundColor: 'rgba(222, 255, 154, 0.7)',
+                        borderColor: '#deff9a',
+                        borderWidth: 1,
+                        borderRadius: 6,
+                        hoverBackgroundColor: '#deff9a'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { 
+                                stepSize: 1, 
+                                color: '#888888',
+                                font: { size: 14 }
+                            },
+                            grid: { 
+                                color: 'rgba(255, 255, 255, 0.05)',
+                                drawBorder: false
+                            }
+                        },
+                        x: {
+                            ticks: { 
+                                color: '#a0a0a0',
+                                font: { size: 14, weight: 'bold' }
+                            },
+                            grid: { display: false }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.9)',
+                            titleColor: '#deff9a',
+                            bodyColor: '#ffffff',
+                            borderColor: 'rgba(222, 255, 154, 0.3)',
+                            borderWidth: 1,
+                            padding: 12,
+                            displayColors: false,
+                            callbacks: {
+                                title: function(context) {
+                                    return 'Score: ' + context[0].label;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize and set a 5-second polling interval for live updates
+        fetchData();
+        setInterval(fetchData, 5000);
+    </script>
+</body>
+</html>
